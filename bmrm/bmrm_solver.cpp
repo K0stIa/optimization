@@ -3,20 +3,12 @@
 #include <time.h>       /* time_t, struct tm, difftime, time, mktime */
 #include <assert.h>
 
-#include <iostream>
-
-#include "Python.h"
-
-#define PY_ARRAY_UNIQUE_SYMBOL Py_Array_API_bmrm_solver
-//#define NO_IMPORT_ARRAY
-#include "numpy/arrayobject.h"
-
 #include "bmrm_solver.h"
 #include "libqp.h"
 
 using namespace shogun;
 
-BMRM_Solver::BMRM_Solver(const int dim, PyObject *oracle) : dim(dim), oracle_obj(oracle) {
+BMRM_Solver::BMRM_Solver() {
     set_TolRel(0.01);
     set_TolAbs(0.0);
     set_BufSize(1000);
@@ -27,14 +19,19 @@ BMRM_Solver::BMRM_Solver(const int dim, PyObject *oracle) : dim(dim), oracle_obj
     set_Tmax(100);
     set_cp_models(1);
     set_verbose(true);
-
-    import_array();
-
-    Py_INCREF(this->oracle_obj);
+	
+	w_arr = NULL;
+    s_arr = NULL;
 }
 
-BMRM_Solver::~BMRM_Solver() { 
-    Py_DECREF(this->oracle_obj);
+BMRM_Solver::~BMRM_Solver() {
+	
+	if(w_arr!=NULL) { Py_CLEAR(w_arr); w_arr = NULL; } //Py_XDECREF
+    if(s_arr!=NULL) { Py_CLEAR(s_arr); s_arr = NULL; } //Py_CLEAR
+
+    if(w_arr != NULL || s_arr != NULL ) {
+        printf("numpy array wasn't removed by GC\n");
+    }
 }
 
 void BMRM_Solver::set_TolRel(double tolrel) {
@@ -72,62 +69,65 @@ void BMRM_Solver::set_verbose(bool _verbose) {
     verbose = _verbose;
 }
 
- PyObject * BMRM_Solver::learn(int algorithm) {
+PyObject* BMRM_Solver::learn(int algorithm) {
 
-    int dimensions[] = {dim,1};
-    PyArrayObject *py_arr = (PyArrayObject*)PyArray_FromDims(2, dimensions, NPY_DOUBLE);
-
-    if(!PyArray_ISCONTIGUOUS(py_arr)) {
-        std::cerr << "allocated array is not conditinious\n";
-        exit(0);
-    }
-
-    double *w = (double*)((PyArrayObject*)py_arr)->data;
+    const int dim = this->get_dim();
+    double *w = new double[dim];
+    for(int i = 0; i < dim; ++i) w[i] = 0;
 
     if (algorithm == BMRM_Solver::BMRM_USUAL) {
-        report = svm_bmrm_solver(&w[0], _TolRel, _TolAbs, _lambda, _BufSize, cleanICP, cleanAfter, K, T_max, verbose);
+        report = svm_bmrm_solver(w, _TolRel, _TolAbs, _lambda, _BufSize, cleanICP, cleanAfter, K, T_max, verbose);
     }
     else if (algorithm == BMRM_Solver::BMRM_PROXIMAL) {
-        report = svm_ppbm_solver(&w[0], _TolRel, _TolAbs, _lambda, _BufSize, cleanICP, cleanAfter, K, T_max, verbose);
+        report = svm_ppbm_solver(w, _TolRel, _TolAbs, _lambda, _BufSize, cleanICP, cleanAfter, K, T_max, verbose);
     } else {
         printf("no algorithm %d\n", algorithm);
     }
 
-    return PyArray_Return(py_arr);
-}
+    int dimensions[] = {dim};
+    PyArrayObject *ret_array = (PyArrayObject *)PyArray_FromDims(1, dimensions, NPY_DOUBLE);
+    double *vals = (double*)ret_array->data;
 
-#define DIND1(a, i) *((double *) PyArray_GETPTR1(a, i))
-#define DIND2(a, i, j) *((double *) PyArray_GETPTR2(a, i, j))
+    for(int i = 0; i < dim; ++i) {
+      vals[i] = w[i];
+    }
+
+    delete [] w;
+
+    return PyArray_Return(ret_array);
+}
 
 double BMRM_Solver::risk(double *w, double *subgrad) {
 
-    npy_intp dimensions[] = {dim,1};
+    const int dim = this->get_dim();    
+	int dimensions[] = {dim};
+	
+	if(w_arr == NULL) {
+		w_arr = PyArray_FromDims(1, dimensions, NPY_DOUBLE);
+	}
+	    
+	if(s_arr == NULL) {
+		s_arr = PyArray_FromDims(1, dimensions, NPY_DOUBLE);
+	}
 
-    PyObject *weights = PyArray_SimpleNewFromData(2, dimensions, NPY_DOUBLE, w);
-    PyObject* method = PyString_FromString("__call__");
-    PyObject *result = PyObject_CallMethodObjArgs(this->oracle_obj, method, weights, 0);
+    double *_w = (double*)((PyArrayObject*)w_arr)->data;
+    double *_s = (double*)((PyArrayObject*)s_arr)->data;
+
+    for(int i = 0; i < dim; ++i) {
+      _w[i] = w[i];
+      _s[i] = 0;
+    }
+	
+	Py_INCREF(w_arr);
+	Py_INCREF(s_arr);
     
-    double ret = 1;
+	double res = this->eval_risk(w_arr, s_arr);
 
-    if (result ) {
-        if(PyTuple_Check(result) && PyTuple_Size(result) == 2) {
-            
-            PyObject *o1 = PyTuple_GetItem(result, 0);
-            
-            ret = PyFloat_AsDouble(o1);
-
-            PyObject * o2 = PyTuple_GetItem(result, 1);
-
-            for(int i = 0; i < dim; ++i) subgrad[i] = DIND2(o2, i, 0);
-        }
-
-        Py_DECREF(result);
+    for(int i = 0; i < dim; ++i) {
+        subgrad[i] = _s[i];
     }
 
-    Py_DECREF(method);
-    Py_DECREF(weights);
-
-    return ret;
+    return res;
 }
 
 /////////////////////////// BRMR ///////////////////////////////////
@@ -271,7 +271,7 @@ bmrm_return_value_T BMRM_Solver::svm_bmrm_solver(
     double rsum, sq_norm_W, sq_norm_Wdiff=0.0;
     int *I, *ICPcounter, *ACPs, cntICP=0, cntACP=0;
     int S=1;
-    int nDim = this->dim;
+    int nDim = (int)this->get_dim();
     double **ICPs;
 
     // CTime ttime;
@@ -627,7 +627,6 @@ bmrm_return_value_T BMRM_Solver::svm_bmrm_solver(
 
             while (cp_ptr != CPList_tail)
             {
-
                 if (ICPcounter[tmp_idx++]>=cleanAfter)
                 {
                     ICPs[cntICP++]=cp_ptr->address;
@@ -643,7 +642,6 @@ bmrm_return_value_T BMRM_Solver::svm_bmrm_solver(
             /* do ICP removal */
             if (cntICP > 0)
             {
-
                 nCP_new=bmrm.nCP-cntICP;
 
                 for (int i=0; i<cntICP; ++i)
@@ -759,7 +757,7 @@ bmrm_return_value_T BMRM_Solver::svm_ppbm_solver(
     double rsum, sq_norm_W, sq_norm_Wdiff, sq_norm_prevW, eps;
     int *I, *I2, *I_start, *I_good, *ICPcounter, *ACPs, cntICP=0, cntACP=0;
     int S=1;
-    int nDim=this->dim;
+    int nDim=(int)this->get_dim();
     double **ICPs;
     int nCP_new=0, qp_cnt=0;
     bmrm_ll *CPList_head, *CPList_tail, *cp_ptr, *cp_ptr2, *cp_list=NULL;

@@ -1,10 +1,19 @@
 #ifndef _BMRM_SOLVER
 #define _BMRM_SOLVER
 
+
 #include <vector>
 
-struct _object;
-typedef _object PyObject;
+/* /\* #define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION *\/ */
+
+#include "Python.h"
+
+#define PY_ARRAY_UNIQUE_SYMBOL Py_Array_API_bmrm_solver
+#ifndef SWIG_FILE_WITH_INIT
+#define NO_IMPORT_ARRAY
+#endif
+
+#include "numpy/arrayobject.h"
 
 
 typedef struct {
@@ -47,7 +56,6 @@ class BMRM_Solver {
     int cp_models;
     bool verbose;
     bmrm_return_value_T report;
-    const int dim;
 
     bmrm_return_value_T svm_bmrm_solver(
                                         double*       W,
@@ -74,16 +82,20 @@ class BMRM_Solver {
                                         bool            verbose);
 
     double risk(double *w, double *subgrad);
-
-    PyObject *oracle_obj;
+	
+	PyObject* w_arr;
+	PyObject* s_arr;
 
  public:
 
-    BMRM_Solver(const int, PyObject *);
+    BMRM_Solver();
+    PyObject* learn(int algorithm = BMRM_Solver::BMRM_USUAL);
+
+    virtual double eval_risk(PyObject *, PyObject *) = 0;
+    virtual const int get_dim() = 0;
+
     virtual ~BMRM_Solver();
 
-    PyObject* learn(int algorithm);
-    
     void set_TolRel(double);
     void set_TolAbs(double);
     void set_BufSize(int);
