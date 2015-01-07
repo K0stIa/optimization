@@ -151,7 +151,7 @@ class BMRM:
 
         import optimization.libqp.py_libqp as libqp
         
-        x_opt, state = libqp.py_libqp_splx_solver(P, F, B, x0, is_equality_constrain,
+        x_opt, state = libqp.libqp_splx_solver(P, F, B, x0, is_equality_constrain,
                                         max_iter, tol_abs, tol_rel, qp_th)
         if state.nIter == max_iter:
             print "WARNING: splex did't find global optima in ", max_iter, " iterations"
