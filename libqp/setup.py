@@ -11,6 +11,7 @@ setup(
     cmdclass = {'build_ext': build_ext},
     ext_modules = [Extension("py_libqp", ["py_libqp.pyx", "c_libqp.cpp", "libqp_splx.cpp"],
                              include_dirs = [np.get_include(),'.'],
+                             language="c++",
                              extra_compile_args=['-O3'])],
     py_modules = ['py_libqp']
 )
