@@ -1,7 +1,7 @@
 rm  bmrm.pyc _bmrm.so
 # bmrm.py
 
-# swig -c++ -python  bmrm_solver.i
+swig -c++ -python  bmrm_solver.i
 
 gcc -fPIC -c libqp_splx.cpp bmrm_solver.cpp bmrm_solver_wrap.cxx \
   -I/usr/include/python2.7 \
