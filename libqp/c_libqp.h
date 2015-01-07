@@ -22,7 +22,7 @@ struct libqp_state{
 
 
 /** QP solver for tasks with simplex constraints */
-libqp_state libqp_splx_solver(
+struct libqp_state libqp_splx_solver(
                               double *Q, int mQ, int nQ,
                               double *F, int mF,
                               double B,
