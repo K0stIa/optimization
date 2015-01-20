@@ -69,7 +69,7 @@ def acent(A, b, x_0):
 
     t = (np.diag(((b-np.dot(A,x))**(-2)).transpose()[0]))
     H = np.dot(np.dot(AT, t), A)
-    return (x,H,niter)
+    return (x,H,niter, niter == MAXITERS)
 
 def  accpm(oracle, C, d, thresh=1.0e-2, Lambda=0.0, MaxIters=50000, is_log = True):
 
@@ -120,7 +120,7 @@ def  accpm(oracle, C, d, thresh=1.0e-2, Lambda=0.0, MaxIters=50000, is_log = Tru
 
         # find analytical center of polyhedron
         tic = time.time()
-        (x, H, nt) = acent(C, d, x)
+        (x, H, nt, max_number_of_iters) = acent(C, d, x)
         #print 'looking for analytical center of polyhedron took %f sec.\n' % (time.time() - tic)
         # compute lower bound
 
@@ -148,7 +148,8 @@ def  accpm(oracle, C, d, thresh=1.0e-2, Lambda=0.0, MaxIters=50000, is_log = Tru
                 (f_best[-1] - l_best[-1]) / np.abs(f_best[-1]))
 
         if (f_best[-1] - l_best[-1]) < thresh * np.abs(f_best[-1]) or \
-          np.abs(f_best[-1]) < thresh or np.abs(f_best[-1] - l_best[-1])<thresh:
+          np.abs(f_best[-1]) < thresh or np.abs(f_best[-1] - l_best[-1])<thresh or \
+          max_number_of_iters:
             break
 
         # ranking and dropping constraints
