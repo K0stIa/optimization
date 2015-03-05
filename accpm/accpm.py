@@ -101,7 +101,7 @@ def  accpm(oracle, C, d, thresh=1.0e-2, Lambda=0.0, MaxIters=50000, is_log = Tru
         itertic = time.time()
         f, g = oracle(x)
         #print 'oracle call took %f sec.\n' % (time.time() - itertic)
-        f = f + Lambda * np.sqrt(np.dot(x.flat,x.flat))/2
+        f = f + Lambda * np.dot(x.flat,x.flat)/2
         g = g.reshape((g.size,1))
         g = g + Lambda * x
 
