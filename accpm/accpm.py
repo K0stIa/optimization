@@ -10,7 +10,7 @@ def pos(x):
 
 def acent(A, b, x_0):
 
-    MAXITERS = 1000
+    MAXITERS = 10000
     ALPHA = 0.1
     BETA = 0.5
     TOL = 1e-6
@@ -71,7 +71,7 @@ def acent(A, b, x_0):
     H = np.dot(np.dot(AT, t), A)
     return (x,H,niter, niter == MAXITERS)
 
-def  accpm(oracle, C, d, thresh=1.0e-2, Lambda=0.0, MaxIters=50000, is_log = True):
+def  accpm(oracle, C, d, thresh=1.0e-2, Lambda=0.0, MaxIters=50000, is_log = True, x0 = None):
 
     n = oracle.dimm
     # initial localization polyhedron {x | Cx <= d}
@@ -86,7 +86,10 @@ def  accpm(oracle, C, d, thresh=1.0e-2, Lambda=0.0, MaxIters=50000, is_log = Tru
     N = 3*n
 
     #initial point
-    x = np.zeros((n,1),dtype=np.double)
+    if not x0 is None:
+        x = x0.copy()
+    else:
+        x = np.zeros((n,1),dtype=np.double)
     x_best = np.array([],dtype=np.double)
 
     f_save = np.array([], dtype=np.double)
